@@ -1,9 +1,9 @@
-import { deepMerge, getClientIP, parseCookies, generateId, log } from './utils.js';
-import { defaultConfig } from './config.js';
-import { executeHooks } from './hooks.js';
-import { getRedis, runGetLua, runPostLua } from './redis.js';
-import { validateSession } from './session.js';
-import { initPusher } from './pusher.js';
+import { deepMerge, getClientIP, parseCookies, generateId, log } from './utils.mjs';
+import { defaultConfig } from './config.mjs';
+import { executeHooks } from './hooks.mjs';
+import { getRedis, runGetLua, runPostLua } from './redis.mjs';
+import { validateSession } from './session.mjs';
+import { initPusher } from './pusher.mjs';
 
 export default function createLikes(userConfig = {}) {
   const config = deepMerge(defaultConfig, userConfig);
@@ -46,7 +46,6 @@ export default function createLikes(userConfig = {}) {
       return res.status(200).end();
     }
 
-    // 调试：禁用会话
     if (!config.debug.disableSession) {
       const cookie = parseCookies(req.headers.cookie || '');
       let sessionId = cookie[config.cookieName];
@@ -87,9 +86,8 @@ export default function createLikes(userConfig = {}) {
 }
 
 async function handleGet(req, res, ctx) {
-  const { config, sessionId, requestId, ip, redis } = ctx;
+  const { config, sessionId, redis } = ctx;
   try {
-    // ===== GET 限流 =====
     const getLimitKey = `get:limit:${sessionId}`;
     const count = await redis.incr(getLimitKey);
     if (count === 1) {
@@ -101,9 +99,7 @@ async function handleGet(req, res, ctx) {
       return res.status(429).json({ success: false, error: 'TOO_MANY_REQUESTS' });
     }
 
-    // ===== 调试：禁用 Nonce =====
     const disableNonce = config.debug.disableNonce;
-
     const { data, nonce } = await runGetLua(ctx, req.query.ids || '', disableNonce);
     res.status(200).json({ success: true, data, nonce });
     ctx.log('info', 'GET success', { ids: req.query.ids || '' });
@@ -118,22 +114,18 @@ async function handleGet(req, res, ctx) {
 }
 
 async function handlePost(req, res, ctx) {
-  const { config, sessionId, requestId, ip, redis, pusher } = ctx;
+  const { config, sessionId, ip, redis, pusher } = ctx;
 
-  // ===== 调试：强制报错 =====
   if (config.debug.forceError) {
     throw new Error('Force error for testing');
   }
 
   try {
-    // ===== 调试：禁用限流 =====
     const disableRateLimit = config.debug.disableRateLimit;
 
-    // ===== 白名单检查 =====
     if (config.rateLimit.whitelist.enabled) {
       const whitelisted = config.rateLimit.whitelist.ips.includes(ip) ||
         config.rateLimit.whitelist.cidrs.some(cidr => {
-          // 简单的 CIDR 匹配（仅 /32 和 /24 简化版）
           if (cidr.endsWith('/32')) {
             return ip === cidr.replace('/32', '');
           }
@@ -147,7 +139,6 @@ async function handlePost(req, res, ctx) {
       }
     }
 
-    // ===== User-Agent 校验 =====
     if (config.security.userAgent.enabled) {
       const ua = req.headers['user-agent'] || '';
       if (ua.length < config.security.userAgent.minLength) {
@@ -182,14 +173,12 @@ async function handlePost(req, res, ctx) {
       return res.status(400).json({ success: false, error: 'INVALID_ID' });
     }
 
-    // ===== 调试：禁用 Nonce =====
     const disableNonce = config.debug.disableNonce;
     if (!disableNonce && !nonceHeader) {
       return res.status(403).json({ success: false, error: 'FORBIDDEN' });
     }
     const nonce = disableNonce ? 'debug_nonce' : nonceHeader;
 
-    // ===== 钩子：onNonceValidate =====
     if (!disableNonce) {
       const nonceValid = await executeHooks(config.hooks, 'onNonceValidate', nonce, req, ctx);
       if (nonceValid === false) {
@@ -198,7 +187,6 @@ async function handlePost(req, res, ctx) {
       }
     }
 
-    // ===== IP 限流（perIp） =====
     if (!disableRateLimit && config.rateLimit.perIp.enabled) {
       const ipKey = `rate:ip:${ip}`;
       const ipCount = await redis.incr(ipKey);
@@ -208,7 +196,6 @@ async function handlePost(req, res, ctx) {
       if (ipCount > config.rateLimit.perIp.maxRequests) {
         await executeHooks(config.hooks, 'onIpBlock', ip, 'rate_limit', req, ctx);
         await executeHooks(config.hooks, 'onRateLimitHit', 'ip', ip, req, ctx);
-        // 封禁 IP
         const blockKey = `block:ip:${ip}`;
         await redis.set(blockKey, '1', { ex: Math.ceil(config.rateLimit.perIp.blockDuration / 1000) });
         ctx.log('warn', 'IP rate limit exceeded', { ip, count: ipCount });
@@ -216,7 +203,6 @@ async function handlePost(req, res, ctx) {
       }
     }
 
-    // ===== 全局限流 =====
     if (!disableRateLimit && config.rateLimit.global.enabled) {
       const now = Date.now();
       const secKey = `rate:global:sec:${Math.floor(now / 1000)}`;
@@ -248,7 +234,6 @@ async function handlePost(req, res, ctx) {
       }
     }
 
-    // ===== 按 ID 限流 =====
     if (!disableRateLimit && config.rateLimit.perId.enabled) {
       const idKey = `rate:id:${id}`;
       const idCount = await redis.incr(idKey);
@@ -262,7 +247,6 @@ async function handlePost(req, res, ctx) {
       }
     }
 
-    // ===== 钩子：beforeLike / beforeUnlike =====
     const hookName = action === 'like' ? 'beforeLike' : 'beforeUnlike';
     const should = await executeHooks(config.hooks, hookName, id, req, ctx);
     if (should === false) {
@@ -270,7 +254,6 @@ async function handlePost(req, res, ctx) {
       return res.status(403).json({ success: false, error: 'HOOK_CANCELLED' });
     }
 
-    // ===== 执行 Lua =====
     const result = await runPostLua(ctx, id, action, nonce, disableRateLimit, disableNonce);
 
     if (result.error) {
@@ -292,17 +275,14 @@ async function handlePost(req, res, ctx) {
       throw new Error(result.error);
     }
 
-    // ===== 钩子：beforeCountUpdate / afterCountUpdate =====
     let delta = action === 'like' ? 1 : -1;
     const currentCount = result.newVal - delta;
     const modifiedDelta = await executeHooks(config.hooks, 'beforeCountUpdate', id, delta, currentCount, req, ctx);
     if (typeof modifiedDelta === 'number' && modifiedDelta !== delta) {
-      // 如果钩子修改了 delta，需要重新计算
       ctx.log('debug', 'Delta modified by hook', { original: delta, modified: modifiedDelta });
     }
     await executeHooks(config.hooks, 'afterCountUpdate', id, result.newVal, delta, req, ctx);
 
-    // ===== Pusher 推送（带钩子） =====
     if (config.pusher.enabled && pusher) {
       let pushData = { id, likes: result.newVal, action };
       const hookResult = await executeHooks(config.hooks, 'beforePusherTrigger', config.pusher.channel, config.pusher.event, pushData, req, ctx);
@@ -326,11 +306,9 @@ async function handlePost(req, res, ctx) {
       }
     }
 
-    // ===== 钩子：afterLike / afterUnlike =====
     const afterHook = action === 'like' ? 'afterLike' : 'afterUnlike';
     await executeHooks(config.hooks, afterHook, id, result.newVal, req, ctx);
 
-    // ===== 响应组装 =====
     const responseData = {
       success: true,
       id,

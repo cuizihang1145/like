@@ -1,11 +1,10 @@
 import { Redis } from '@upstash/redis';
 import crypto from 'crypto';
-import { executeHooks } from './hooks.js';
+import { executeHooks } from './hooks.mjs';
 
 let kv = null;
 let mockStore = {};
 
-// GET 的 Lua 脚本
 const GET_LUA = `
   local countKey = KEYS[1]
   local nonceKey = KEYS[2]
@@ -18,7 +17,6 @@ const GET_LUA = `
   return redis.call('HGETALL', countKey)
 `;
 
-// POST 的 Lua 脚本
 const POST_LUA = `
   local shortKey = KEYS[1]
   local sessionKey = KEYS[2]
@@ -83,13 +81,11 @@ const POST_LUA = `
   return {newVal, 'ok', shouldRenew}
 `;
 
-// ===== Mock Redis 实现 =====
 function createMockRedis(config) {
   const log = config.log?.enabled ? console.warn : () => {};
   return {
     async eval(script, keys, args) {
       log('⚠️ Mock: eval', script.slice(0, 30), keys, args);
-      // 简单的 mock 返回值
       if (script.includes('HGETALL')) return {};
       return [0, 'ok', 1];
     },
@@ -140,7 +136,6 @@ function createMockRedis(config) {
 }
 
 export function getRedis(config) {
-  // ===== 调试：Mock Redis =====
   if (config.debug.mockRedis) {
     return createMockRedis(config);
   }
@@ -151,12 +146,10 @@ export function getRedis(config) {
       token: process.env.KV_REST_API_TOKEN,
     };
 
-    // ===== performance.redis.timeout =====
     if (config.performance.redis.timeout) {
       options.timeout = config.performance.redis.timeout;
     }
 
-    // ===== performance.redis.retryAttempts + retryDelay =====
     if (config.performance.redis.retryAttempts > 0) {
       options.retry = {
         attempts: config.performance.redis.retryAttempts,
@@ -184,14 +177,12 @@ export async function runGetLua(ctx, ids, disableNonce = false) {
 
   ctx.log('debug', 'GET Lua', { keys, args: args.slice(0, 5) });
 
-  // ===== performance.redis.luaEnabled =====
   let result;
   if (config.performance.redis.luaEnabled) {
     await executeHooks(config.hooks, 'beforeRedisCommand', 'EVAL', [GET_LUA, keys, args], ctx);
     result = await redis.eval(GET_LUA, keys, args);
     await executeHooks(config.hooks, 'afterRedisCommand', 'EVAL', result, ctx);
   } else {
-    // 降级：逐个 hsetnx
     ctx.log('warn', 'Lua disabled, fallback to multi-command');
     await executeHooks(config.hooks, 'beforeRedisCommand', 'HSETNX', keys, args, ctx);
     const countKey = keys[0];
@@ -200,7 +191,6 @@ export async function runGetLua(ctx, ids, disableNonce = false) {
     }
     result = await redis.hgetall(countKey);
     await executeHooks(config.hooks, 'afterRedisCommand', 'HGETALL', result, ctx);
-    // 还要设置 nonce
     await redis.set(`nonce:${nonce}`, 'valid', { ex: config.nonce.ttl });
   }
 
@@ -238,7 +228,6 @@ export async function runPostLua(ctx, id, action, nonce, disableRateLimit = fals
 
   ctx.log('debug', 'POST Lua', { keys, args: args.slice(0, 5) });
 
-  // ===== performance.redis.luaEnabled =====
   let result;
   if (config.performance.redis.luaEnabled) {
     await executeHooks(config.hooks, 'beforeRedisCommand', 'EVAL', [POST_LUA, keys, args], ctx);
@@ -250,13 +239,11 @@ export async function runPostLua(ctx, id, action, nonce, disableRateLimit = fals
     }
     await executeHooks(config.hooks, 'afterRedisCommand', 'EVAL', result, ctx);
   } else {
-    // 降级：普通命令
     ctx.log('warn', 'Lua disabled, fallback to multi-command');
     let status = 'ok';
     let newVal = 0;
     let shouldRenew = 0;
 
-    // Nonce 校验
     if (!disableNonce) {
       const nonceVal = await redis.get(nonceKey);
       if (!nonceVal) {
@@ -265,7 +252,6 @@ export async function runPostLua(ctx, id, action, nonce, disableRateLimit = fals
       await redis.del(nonceKey);
     }
 
-    // 限流
     if (!disableRateLimit) {
       const shortVal = await redis.get(shortKey);
       if (shortVal && (now - parseInt(shortVal, 10)) < config.rateLimit.perSession.cooldown) {
@@ -280,14 +266,12 @@ export async function runPostLua(ctx, id, action, nonce, disableRateLimit = fals
       await redis.expire(sessionKey, 300);
     }
 
-    // 更新计数
     newVal = await redis.hincrby(countKey, id, delta);
     if (newVal < 0) {
       newVal = 0;
       await redis.hset(countKey, id, '0');
     }
 
-    // Nonce 续期
     if (!disableNonce) {
       const renewCount = await redis.incr(renewKey);
       if (renewCount === 1) await redis.expire(renewKey, config.nonce.renewWindow);

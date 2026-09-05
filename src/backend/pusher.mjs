@@ -1,5 +1,5 @@
 import Pusher from 'pusher';
-import { executeHooks } from './hooks.js';
+import { executeHooks } from './hooks.mjs';
 
 export function initPusher(pusherConfig) {
   if (!pusherConfig.appId || !pusherConfig.key || !pusherConfig.secret) {
