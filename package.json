@@ -1,6 +1,7 @@
 {
   "name": "lilkeu",
   "version": "0.0.1",
+  "type": "module",
   "description": "一个配置简单轻量易用的小型无登录态无人机验证点赞系统",
   "main": "server.js",
   "exports": {
