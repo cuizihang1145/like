@@ -10,7 +10,7 @@
   },
   "files": ["server.js", "client.js", "src", "types.d.ts"],
   "scripts": {
-    "build": "esbuild src/backend/index.mjs --bundle --minify --outfile=server.js --platform=node && esbuild src/frontend/index.js --bundle --minify --outfile=client.js"
+    "build": "esbuild src/backend/index.mjs --bundle --minify --outfile=server.js --platform=node && esbuild src/frontend/index.js --bundle --minify --outfile=client.js --external:crypto"
   },
   "dependencies": {
     "@upstash/redis": "^1.28.0",
