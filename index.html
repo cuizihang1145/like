@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>点赞系统测试</title>
+    <!-- 如果你用FontAwesome图标，加上这行（可选） -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <style>
+        /* 简单样式，让你能看到效果 */
+        body {
+            font-family: system-ui, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .card-title {
+            font-size: 16px;
+            font-weight: 500;
+        }
+        .like-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: none;
+            border: none;
+            font-size: 18px;
+            cursor: pointer;
+            padding: 6px 12px;
+            border-radius: 20px;
+            transition: background 0.2s;
+            color: #333;
+        }
+        .like-toggle:hover {
+            background: #f0f0f0;
+        }
+        .like-toggle i {
+            font-size: 20px;
+            transition: transform 0.2s;
+            color: #ccc;
+        }
+        .like-toggle .liked i {
+            color: #ff4757;
+        }
+        .like-count {
+            font-size: 16px;
+            font-weight: 600;
+            min-width: 20px;
+            text-align: center;
+            color: #333;
+        }
+        /* 点赞后的动画效果（由系统自动处理） */
+        .like-toggle .fa-heart {
+            transition: transform 0.2s;
+        }
+        .like-toggle.liked .fa-heart {
+            transform: scale(1.2);
+        }
+        /* Toast提示由系统自动生成，无需额外样式 */
+        .tip {
+            margin-top: 30px;
+            padding: 16px;
+            background: #fff3cd;
+            border-radius: 8px;
+            color: #856404;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🔥 点赞测试</h1>
+    <p style="color:#666;margin-bottom:24px;">点击❤️点赞，再点取消。数据存内存，重启即清零。</p>
+
+    <!-- ====== 文章1 ====== -->
+    <div class="card">
+        <span class="card-title">📝 文章标题 #1</span>
+        <button class="like-toggle" data-index="101">
+            <i class="far fa-heart"></i>
+            <span class="like-count" id="like-count-101">0</span>
+        </button>
+    </div>
+
+    <!-- ====== 文章2 ====== -->
+    <div class="card">
+        <span class="card-title">📝 文章标题 #2</span>
+        <button class="like-toggle" data-index="102">
+            <i class="far fa-heart"></i>
+            <span class="like-count" id="like-count-102">0</span>
+        </button>
+    </div>
+
+    <!-- ====== 文章3 ====== -->
+    <div class="card">
+        <span class="card-title">📝 文章标题 #3</span>
+        <button class="like-toggle" data-index="103">
+            <i class="far fa-heart"></i>
+            <span class="like-count" id="like-count-103">0</span>
+        </button>
+    </div>
+
+    <div class="tip">
+        💡 <strong>提示：</strong> 点赞数据存在内存中，服务器重启会归零。<br />
+        后端接口地址：<code>/api/likes</code>（默认），可在 <code>server.js</code> 中修改。
+    </div>
+
+    <!-- ====== 引入前端核心文件 ====== -->
+    <script src="/client.js"></script>
+
+    <script>
+        // 初始化点赞系统
+        // 如果你的后端部署在别的域名，可以传 apiBase: 'https://你的域名/api'
+        const likes = KSLikes.init({
+            // apiBase: '/api',  // 默认就是 /api，不用改
+            // storageKey: 'liked_ids', // 本地存储的key，默认即可
+            // 如果想换图标，可以这样：
+            // icon: {
+            //     liked: 'fas fa-heart',
+            //     unliked: 'far fa-heart',
+            // },
+        });
+
+        // 如果你需要在控制台手动操作，可以这样：
+        // likes.toggleLike('101', 'like')   // 手动点赞
+        // likes.toggleLike('101', 'unlike') // 手动取消
+        // likes.isLiked('101')              // 查看是否已赞
+        // likes.fetchLikes(['101','102'])   // 手动刷新数据
+
+        console.log('✅ 点赞系统已初始化，试试点击❤️吧！');
+    </script>
+
+</body>
+              </html>
