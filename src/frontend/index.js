@@ -1,5 +1,5 @@
 import { defaultConfig } from './config.js';
-import { deepMerge } from '../backend/utils.js'; // 复用
+import { deepMerge } from '../backend/utils.mjs'; // 复用
 import { initStorage, saveLikedIds, loadLikedIds } from './storage.js';
 import { updateUI, showToast, getToggleElement, getCountElement } from './dom.js';
 import { postLike, fetchLikes } from './api.js';
