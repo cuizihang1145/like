@@ -29,13 +29,26 @@ export function parseCookies(cookieStr) {
 }
 
 export function deepMerge(target, source) {
+  if (!source || typeof source !== 'object') return target;
   const result = { ...target };
-  for (const key in source) {
-    if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
-      result[key] = deepMerge(target[key] || {}, source[key]);
-    } else {
-      result[key] = source[key];
+  const seen = new WeakSet();
+
+  function merge(dest, src) {
+    for (const key in src) {
+      const value = src[key];
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        if (seen.has(value)) continue;
+        seen.add(value);
+        if (!dest[key] || typeof dest[key] !== 'object' || Array.isArray(dest[key])) {
+          dest[key] = {};
+        }
+        merge(dest[key], value);
+      } else {
+        dest[key] = value;
+      }
     }
   }
+
+  merge(result, source);
   return result;
 }
